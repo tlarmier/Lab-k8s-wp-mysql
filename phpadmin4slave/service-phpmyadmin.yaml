@@ -1,0 +1,15 @@
+kind: Service
+apiVersion: v1
+metadata:
+  name: admin-bdd-as-slave
+  namespace: thierry-space
+  labels:
+    app: admin-bdd-as-slave
+spec:
+  selector:
+    app: admin-bdd-as-slave
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 80
+  type: ClusterIP

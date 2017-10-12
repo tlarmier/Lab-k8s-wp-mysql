@@ -1,0 +1,121 @@
+apiVersion: apps/v1beta1
+kind: Deployment
+metadata:
+  name: bdd-slaves-as
+  namespace: thierry-space
+  labels:
+    app: bdd-as
+    role: slave
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: bdd-as
+      role: slave
+  template:
+    metadata:
+      labels:
+        app: bdd-as
+        role: slave
+    spec:
+      initContainers:
+      - name: init-slave
+        image: mysql:5.7
+        env:
+        - name: MYSQL_ROOT_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: bdd-as
+              key: rootpass
+        command:
+        - bash
+        - /mnt/config/initSlave.sh
+        volumeMounts:
+        - mountPath: /mnt/conf.d
+          name: conf
+        - mountPath: /mnt/config
+          name: config
+      containers:
+      - name: mysql
+        image: mysql:5.7
+        env:
+        - name: MYSQL_ROOT_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: bdd-as
+              key: rootpass
+        - name: MYSQL_ADMIN_USER
+          valueFrom:
+            secretKeyRef:
+              name: bdd-as
+              key: adminuser
+        - name: MYSQL_ADMIN_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: bdd-as
+              key: adminpass 
+        ports:
+          - containerPort: 3306
+            name: mysql
+        volumeMounts:
+          - mountPath: /var/lib/mysql
+            name: data 
+          - mountPath: /etc/mysql/conf.d
+            name: conf
+          - mountPath: /mnt/config
+            name: config
+        livenessProbe:
+          exec:
+            command: ["mysqladmin", "ping", "-u" , "root","-pk8sadmin"]
+          initialDelaySeconds: 30
+          timeoutSeconds: 5
+        readinessProbe:
+          exec:
+            # Check we can execute queries over TCP (skip-networking is off).
+            # Problem! ReadinessProbe don't evaluate env variable. I can't use $MySQL_ADMIN_USER
+            command: ["mysql", "-u", "root", "-pk8sadmin", "-h", "127.0.0.1", "-e", "SELECT 1"]
+          initialDelaySeconds: 5
+          timeoutSeconds: 1
+      - name: config-slave
+        image: mysql:5.7
+        command:
+        - bash
+        - /config/configSlave.sh
+        env:
+        - name: MYSQL_ROOT_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: bdd-as
+              key: rootpass
+        - name: MYSQL_REP_USER
+          valueFrom:
+            secretKeyRef:
+              name: bdd-as
+              key: repuser
+        - name: MYSQL_REP_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: bdd-as
+              key: reppass
+        - name: MYSQL_ADMIN_USER
+          valueFrom:
+            secretKeyRef:
+              name: bdd-as
+              key: adminuser
+        - name: MYSQL_ADMIN_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: bdd-as
+              key: adminpass 
+        volumeMounts:
+        - name: config
+          mountPath: /config          
+      volumes:
+        - name: data
+          emptyDir: {}
+        - name: conf
+          emptyDir: {}
+        - name: config
+          configMap:
+            name: bdd-as
+

@@ -1,0 +1,95 @@
+apiVersion: apps/v1beta1
+kind: Deployment
+metadata:
+  name: bdd-as
+  namespace: thierry-space
+  labels:
+    app: bdd-as
+    role: master
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: bdd-as
+      role: master 
+  template:
+    metadata:
+      labels:
+        app: bdd-as
+        role: master
+    spec:
+      initContainers:
+      - name: init-master
+        image: mysql:5.7
+        command:
+        - bash
+        - /mnt/config/initMaster.sh
+        volumeMounts:
+        - mountPath: /mnt/conf.d
+          name: conf
+        - mountPath: /mnt/config
+          name: config
+      containers:
+        - name: mysql
+          image: mysql:5.7
+          env:
+            - name: MYSQL_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: bdd-as
+                  key: rootpass
+          ports:
+            - containerPort: 3306
+              name: mysql
+          volumeMounts:
+            - mountPath: /var/lib/mysql
+              name: data
+              subPath: mysql-bdd-as
+            - mountPath: /etc/mysql/conf.d
+              name: conf
+            - mountPath: /mnt/config
+              name: config
+        - name: config-master
+          image: mysql:5.7
+          command:
+          - bash
+          - /config/configMaster.sh
+          env:
+          - name: MYSQL_ROOT_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: bdd-as
+                key: rootpass
+          - name: MYSQL_REP_USER
+            valueFrom:
+              secretKeyRef:
+                name: bdd-as
+                key: repuser
+          - name: MYSQL_REP_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: bdd-as
+                key: reppass
+          - name: MYSQL_ADMIN_USER
+            valueFrom:
+              secretKeyRef:
+                name: bdd-as
+                key: adminuser
+          - name: MYSQL_ADMIN_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: bdd-as
+                key: adminpass
+          volumeMounts:
+          - name: config
+            mountPath: /config          
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+           claimName: dd-master
+        - name: conf
+          emptyDir: {}
+        - name: config
+          configMap:
+            name: bdd-as
+

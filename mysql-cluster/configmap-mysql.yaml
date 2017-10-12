@@ -1,0 +1,169 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: bdd-as
+  namespace: thierry-space	
+  labels:
+    app: bdd-as
+data:
+  master.cnf: |
+    # Apply this config only on the master.
+    [mysqld]
+    log-bin=masterlog
+    server-id=1 
+  slave.cnf: |
+    # Apply this config only on slaves.
+    [mysqld]
+    read-only=1
+  initMaster.sh: |
+    cp /mnt/config/master.cnf /mnt/conf.d/
+  initSlave.sh: |
+    cp /mnt/config/slave.cnf /mnt/conf.d/
+
+    # Is master ON ? if not then exit = init error
+    if ! mysql -u root -p$MYSQL_ROOT_PASSWORD -h master-bdd-as -e "SELECT 1"
+        then
+        echo "----->Master not running" 
+        exit 1
+        fi
+    # config uuid server
+    #echo "----->Config uuid for $HOSTNAME" 
+    #echo "[auto]" > /var/lib/mysql/auto.cnf
+    #echo "server_uuid=$HOSTNAME" >> /var/lib/mysql/auto.cnf
+    #echo "----->uuid configured"
+    # Is Table slavepods exist in kubernetes database? 
+    if ! mysql -u root -p$MYSQL_ROOT_PASSWORD -h master-bdd-as -e "USE kubernetes"
+       then
+    echo "----->Create Kubernetes Database"  
+    mysql -u root -p$MYSQL_ROOT_PASSWORD -h master-bdd-as <<EOF
+    CREATE DATABASE kubernetes;
+    USE kubernetes;
+    CREATE TABLE slavepods (id int(10) unsigned NOT NULL AUTO_INCREMENT, POD text NOT NULL, Time datetime NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (id)) ENGINE=InnoDB DEFAULT CHARSET=latin1;
+    INSERT INTO slavepods (POD) VALUES ('The Master');
+    EOF
+    echo "----->Database Kubernetes created" 
+       fi
+
+    # Lock table for over POD in case of simultaneous initialisation
+    until mysql -u root -p$MYSQL_ROOT_PASSWORD -h master-bdd-as -e "LOCK TABLES kubernetes.slavepods WRITE"
+          do
+          echo "----->Try to lock slavepods table... Locked by anover POD?"
+          done 
+    # What's the last id recorded?
+    id=`mysql -u root -p$MYSQL_ROOT_PASSWORD -h master-bdd-as -e "SELECT id from kubernetes.slavepods ORDER BY id DESC LIMIT 1" -N`
+    # add POD name to Slave list
+    echo "----->Add slave to list"
+    mysql -u root -p$MYSQL_ROOT_PASSWORD -h master-bdd-as <<EOF
+    USE kubernetes;
+    INSERT INTO slavepods (POD) VALUES ('$HOSTNAME');
+    EOF
+    #UNLOCK Table
+    mysql -u root -p$MYSQL_ROOT_PASSWORD -h master-bdd-as -e "UNLOCK TABLES kubernetes.slavepods"
+    # New slave id is last id+1.  max value=4294967295
+    ((id+=1))
+    echo "-----> Slave Id will be $id"
+    # Add line in slave.cnf file
+    echo "server-id=$id" >> /mnt/conf.d/slave.cnf
+  configMaster.sh: |
+    #!/bin/bash
+    echo "##################"
+    echo "#  CONF Master    "
+    echo "##################"
+
+    # Is Master UP ?
+    until mysql -u root -p$MYSQL_ROOT_PASSWORD -h 127.0.0.1 -e "SELECT 1"
+    do
+      echo "-----> Waiting for Master..."
+      sleep 2
+    done
+    
+    # Create replication user if not exist
+    echo "-----> Create Replication user..."
+    mysql -u root -p$MYSQL_ROOT_PASSWORD -h 127.0.0.1 <<EOF
+    CREATE USER IF NOT EXISTS '$MYSQL_REP_USER'@'%' IDENTIFIED BY '$MYSQL_REP_PASSWORD'; 
+    GRANT REPLICATION SLAVE ON *.* TO '$MYSQL_REP_USER'@'%';
+    EOF
+    echo "----->  Replication user created!" 
+    # Create admin user with all access without superuser if not exist
+    echo "-----> Create admin user..."
+    mysql -u root -p$MYSQL_ROOT_PASSWORD -h 127.0.0.1 <<EOF
+    CREATE USER IF NOT EXISTS '$MYSQL_ADMIN_USER' IDENTIFIED BY '$MYSQL_ADMIN_PASSWORD'; 
+    GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, DROP, RELOAD, SHUTDOWN, PROCESS, FILE, REFERENCES, INDEX, ALTER, SHOW DATABASES, CREATE TEMPORARY TABLES, LOCK TABLES, REPLICATION SLAVE, REPLICATION CLIENT, CREATE VIEW, EVENT, TRIGGER, SHOW VIEW, CREATE ROUTINE, ALTER ROUTINE, CREATE USER, EXECUTE ON *.* TO '$MYSQL_ADMIN_USER' REQUIRE NONE WITH GRANT OPTION MAX_QUERIES_PER_HOUR 0 MAX_CONNECTIONS_PER_HOUR 0 MAX_UPDATES_PER_HOUR 0 MAX_USER_CONNECTIONS 0;
+    EOF
+    echo "----->  Admin user created!" 
+    # Create Kubernet Database en slavepods Table if not exists
+    echo "----->Create Kubernetes Database"  
+    mysql -u root -p$MYSQL_ROOT_PASSWORD -h 127.0.0.1 <<EOF
+    CREATE DATABASE IF NOT EXISTS kubernetes;
+    USE kubernetes;
+    CREATE TABLE IF NOT EXISTS slavepods (id int(10) unsigned NOT NULL AUTO_INCREMENT, POD text NOT NULL, Time datetime NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (id)) ENGINE=InnoDB DEFAULT CHARSET=latin1;
+    INSERT INTO slavepods (POD) VALUES ('Master is $HOSTNAME');
+    EOF
+    echo "----->Database Kubernetes created"
+
+    echo "################################"
+    echo "End of master configuration"
+    echo "################################" 
+    # Don't terminate script... 
+    while true 
+          do
+          sleep 3600
+          done 
+
+  configSlave.sh: |
+    #!/bin/bash
+    echo "##################"
+    echo "#  CONF SLAVE    "
+    echo "##################"
+ 
+    # Is Slave UP ?
+    until mysql -u root -p$MYSQL_ROOT_PASSWORD -h 127.0.0.1 -e "SELECT 1"
+    do
+      echo "-----> Waiting for Slave..."
+      sleep 2
+    done
+
+    # Create replication user if not exist
+    echo "-----> Create Replication user..."
+    mysql -u root -p$MYSQL_ROOT_PASSWORD -h 127.0.0.1 <<EOF
+    CREATE USER IF NOT EXISTS '$MYSQL_REP_USER'@'%' IDENTIFIED BY '$MYSQL_REP_PASSWORD'; 
+    GRANT REPLICATION SLAVE ON *.* TO '$MYSQL_REP_USER'@'%';
+    EOF
+    echo "----->  Replication user created!" 
+    # Create admin user with all access without superuser if not exist
+    echo "-----> Create admin user..."
+    mysql -u root -p$MYSQL_ROOT_PASSWORD -h 127.0.0.1 <<EOF
+    CREATE USER IF NOT EXISTS '$MYSQL_ADMIN_USER' IDENTIFIED BY '$MYSQL_ADMIN_PASSWORD'; 
+    GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, DROP, RELOAD, SHUTDOWN, PROCESS, FILE, REFERENCES, INDEX, ALTER, SHOW DATABASES, CREATE TEMPORARY TABLES, LOCK TABLES, REPLICATION SLAVE, REPLICATION CLIENT, CREATE VIEW, EVENT, TRIGGER, SHOW VIEW, CREATE ROUTINE, ALTER ROUTINE, CREATE USER, EXECUTE ON *.* TO '$MYSQL_ADMIN_USER' REQUIRE NONE WITH GRANT OPTION MAX_QUERIES_PER_HOUR 0 MAX_CONNECTIONS_PER_HOUR 0 MAX_UPDATES_PER_HOUR 0 MAX_USER_CONNECTIONS 0;
+    EOF
+    echo "----->  Admin user created!" 
+
+    # Is master UP and replication user exist?
+    if ! mysql -u $MYSQL_REP_USER -p$MYSQL_REP_PASSWORD -h master-bdd-as -e "SELECT 1"
+        then
+        echo "----->Master not running or replication user is not created on master" 
+        exit 1
+        fi
+
+    echo "----->Configure Master Host end start slave"
+    mysql -u root -p$MYSQL_ROOT_PASSWORD -h 127.0.0.1 <<EOF
+    CHANGE MASTER TO MASTER_HOST='master-bdd-as', MASTER_USER='$MYSQL_REP_USER', MASTER_PASSWORD='$MYSQL_REP_PASSWORD';
+    START slave;
+    EOF
+
+    echo "################################"
+    echo "End of slave configuration"
+    echo "################################"
+    
+    # Don't terminate script... 
+    while true 
+          do
+          sleep 3600
+          done 
+
+    #93226b89-a8e8-11e7-81a7-0a580a020306
+    #551ae8a0-a8e7-11e7-b829-0a580a0205a6
+    #f967079f-a8fb-11e7-aa90-0a580a0205a8  
+    
+    
+

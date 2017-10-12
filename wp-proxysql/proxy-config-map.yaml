@@ -1,0 +1,76 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: wp-proxy
+  namespace: thierry-space
+  labels:
+    app: wp-proxysql
+data:
+  init.sh: |
+    #!/bin/bash
+
+    echo "##################"
+    echo "#  CONF PROXY    "
+    echo "##################"
+  
+    #test if client mysql is ready
+    until mysql -u admin -padmin -h 127.0.0.1 -P6032 -e "SELECT 1"
+    do
+      echo "-----> Waiting for Proxy..."
+      sleep 2
+    done
+    
+    echo "-----> Proxy is up"
+
+    #test if mysql master service is up
+    echo "-----> Try to Connect to master-bdd-as with user $WP_DB_ADMIN_USER..."
+    mysql -u $WP_DB_ADMIN_USER -p$WP_DB_ADMIN_PASS -h master-bdd-as -e "SELECT 1" || exit 1
+    echo "-----> Connexion to master-bdd-as with user $WP_DB_ADMIN_USER OK"  
+    
+    #test if mysql slave service is up
+    echo "-----> Try to Connect to slave-bdd-as with user $WP_DB_ADMIN_USER..."
+    mysql -u $WP_DB_ADMIN_USER -p$WP_DB_ADMIN_PASS -h slave-bdd-as -e "SELECT 1" || exit 1
+    echo "----->Connexion test to slave-bdd-as with user $mysqlWordpressUser OK" 
+    
+    #insert Master Service to proxy	
+    sqlcmd="INSERT INTO mysql_servers(hostgroup_id,hostname,port) VALUES (1,'master-bdd-as',3306)"
+    mysql -u admin -padmin -h 127.0.0.1 -P 6032 -e "$sqlcmd"
+
+    #insert Slave Service to proxy	
+    sqlcmd="INSERT INTO mysql_servers(hostgroup_id,hostname,port) VALUES (1,'slave-bdd-as',3306)"
+    mysql -u admin -padmin -h 127.0.0.1 -P 6032 -e "$sqlcmd"
+    
+    echo "-----> Slave and Master created in Proxy" 
+      
+    mysql -u admin -padmin -h 127.0.0.1 -P 6032 <<EOF
+    UPDATE global_variables SET variable_value='$BDD_ADMIN_USER' WHERE variable_name='mysql-monitor_username';
+    UPDATE global_variables SET variable_value='$BDD_ADMIN_PASS' WHERE variable_name='mysql-monitor_password';
+    UPDATE global_variables SET variable_value='2000' WHERE variable_name IN ('mysql-monitor_connect_interval','mysql-monitor_ping_interval','mysql-monitor_read_only_interval');
+    LOAD MYSQL VARIABLES TO RUNTIME;
+    SAVE MYSQL VARIABLES TO DISK;
+    EOF
+    echo "-----> Serveurs et monitoring configures"  
+    sleep 5
+
+    mysql -u admin -padmin -h 127.0.0.1 -P 6032 <<EOF
+    LOAD MYSQL SERVERS TO RUNTIME;
+    INSERT INTO mysql_replication_hostgroups VALUES (1,2,'group comment');
+    EOF
+
+    sleep 5
+    echo "----> Hostgroups config"  
+    mysql -u admin -padmin -h 127.0.0.1 -P 6032 <<EOF
+    LOAD MYSQL SERVERS TO RUNTIME;
+    INSERT INTO mysql_users(username,password,default_hostgroup) VALUES ('root','$MYSQL_ROOT_PASS',1);
+    INSERT INTO mysql_users(username,password,default_hostgroup) VALUES ('$WP_DB_ADMIN_USER','$WP_DB_ADMIN_PASS',1);
+    LOAD MYSQL USERS TO RUNTIME;
+    SAVE MYSQL USERS TO DISK;
+    EOF
+    echo "################################"
+    echo "Configuration du proxy terminée "
+    echo "################################"
+    while true
+      do
+      sleep 3600	
+      done
+

@@ -1,0 +1,106 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: wp-proxysql
+  namespace: thierry-space
+  labels:
+    app: wp-proxysql
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: wp-proxysql
+    spec:
+      hostname: wp-proxy
+      containers:
+      - name: wp
+        image: wordpress:latest
+        resources:
+          requests:
+            cpu: "200m"
+            memory: "128Mi"
+          limits:
+            cpu: "1000m"
+            memory: "256Mi" 
+        env:
+          - name: WORDPRESS_DB_USER
+            valueFrom:
+              secretKeyRef:
+                name: wp
+                key: wp_db_user
+          - name: WORDPRESS_DB_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: wp
+                key: wp_db_pass
+          - name: WORDPRESS_DB_HOST
+            value: 127.0.0.1:6033 
+        ports:
+        - name: http
+          containerPort: 80
+        volumeMounts:
+        - name: pv-wp
+          mountPath: /var/www/html
+      - name: proxysql
+        image: prima/proxysql
+        resources:
+          requests:
+            cpu: "200m"
+            memory: "128Mi"
+          limits:
+            cpu: "500m"
+            memory: "256Mi" 
+        ports:
+        - name: pxsql
+          containerPort: 6033
+        - name: pxsql-conf
+          containerPort: 6032
+      - name: init-proxy
+        image: mysql:5.7
+        resources:
+          requests:
+            cpu: "50m"
+            memory: "128Mi"
+          limits:
+            cpu: "100m"
+            memory: "150Mi"
+        command:
+        - bash
+        - /config/init.sh 
+        env:
+        - name: MYSQL_ROOT_PASS
+          valueFrom:
+            secretKeyRef:
+              name: bdd-as
+              key: rootpass
+        - name: BDD_ADMIN_USER
+          valueFrom:
+            secretKeyRef:
+              name: bdd-as
+              key: adminuser
+        - name: BDD_ADMIN_PASS
+          valueFrom:
+            secretKeyRef:
+              name: bdd-as
+              key: adminpass
+        - name: WP_DB_ADMIN_USER
+          valueFrom:
+            secretKeyRef:
+              name: wp
+              key: wp_db_user
+        - name: WP_DB_ADMIN_PASS
+          valueFrom:
+            secretKeyRef:
+              name: wp
+              key: wp_db_pass
+        volumeMounts:
+        - name: config
+          mountPath: /config        
+      volumes:
+      - name: pv-wp
+        persistentVolumeClaim:
+          claimName: pvc-wp
+      - name: config
+        configMap:
+          name: "wp-proxy"

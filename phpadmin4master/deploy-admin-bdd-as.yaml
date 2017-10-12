@@ -1,0 +1,29 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: admin-bdd-as
+  namespace: thierry-space
+  labels:
+    app: admin-bdd-as
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: admin-bdd-as
+    spec:
+      containers:
+        - name: phpmyadmin
+          image: phpmyadmin/phpmyadmin
+          env:
+          - name: MYSQL_ROOT_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: bdd-as
+                key: rootpass
+          - name: PMA_HOST
+            value: master-bdd-as
+          ports:
+          - name: http
+            containerPort: 80
+

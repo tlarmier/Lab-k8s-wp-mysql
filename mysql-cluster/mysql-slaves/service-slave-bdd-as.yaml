@@ -1,0 +1,17 @@
+kind: Service
+apiVersion: v1
+metadata:
+  name: slave-bdd-as
+  namespace: thierry-space
+  labels:
+    app: bdd-as
+    role: slave
+spec:
+  selector:
+    app: bdd-as
+    role: slave
+  ports:
+  - protocol: TCP
+    port: 3306
+    targetPort: 3306
+  type: ClusterIP

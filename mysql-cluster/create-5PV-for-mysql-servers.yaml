@@ -1,0 +1,87 @@
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pv1-15g-rwo
+  namespace: thierry-space
+  labels:
+    app: mysql
+spec:
+  capacity:
+    storage: 15Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Recycle
+  nfs:
+    path: /var/nfs/kubernetes/dd1-mysql
+    server: 192.168.1.2
+
+---    
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pv2-15g-rwo
+  namespace: thierry-space
+  labels:
+    app: mysql
+spec:
+  capacity:
+    storage: 15Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Recycle
+  nfs:
+    path: /var/nfs/kubernetes/dd2-mysql
+    server: 192.168.1.2
+
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pv3-15g-rwo
+  namespace: thierry-space
+  labels:
+    app: mysql
+spec:
+  capacity:
+    storage: 15Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Recycle
+  nfs:
+    path: /var/nfs/kubernetes/dd3-mysql
+    server: 192.168.1.2
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pv4-15g-rwo
+  namespace: thierry-space
+  labels:
+    app: mysql
+spec:
+  capacity:
+    storage: 15Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Recycle
+  nfs:
+    path: /var/nfs/kubernetes/dd4-mysql
+    server: 192.168.1.2
+
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pv5-15g-rwo
+  namespace: thierry-space
+  labels:
+    app: mysql
+spec:
+  capacity:
+    storage: 15Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Recycle
+  nfs:
+    path: /var/nfs/kubernetes/dd5-mysql
+    server: 192.168.1.2
