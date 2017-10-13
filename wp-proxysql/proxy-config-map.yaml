@@ -32,16 +32,6 @@ data:
     mysql -u $WP_DB_ADMIN_USER -p$WP_DB_ADMIN_PASS -h slave-bdd-as -e "SELECT 1" || exit 1
     echo "----->Connexion test to slave-bdd-as with user $mysqlWordpressUser OK" 
     
-    #insert Master Service to proxy	
-    sqlcmd="INSERT INTO mysql_servers(hostgroup_id,hostname,port) VALUES (1,'master-bdd-as',3306)"
-    mysql -u admin -padmin -h 127.0.0.1 -P 6032 -e "$sqlcmd"
-
-    #insert Slave Service to proxy	
-    sqlcmd="INSERT INTO mysql_servers(hostgroup_id,hostname,port) VALUES (1,'slave-bdd-as',3306)"
-    mysql -u admin -padmin -h 127.0.0.1 -P 6032 -e "$sqlcmd"
-    
-    echo "-----> Slave and Master created in Proxy" 
-      
     mysql -u admin -padmin -h 127.0.0.1 -P 6032 <<EOF
     UPDATE global_variables SET variable_value='$BDD_ADMIN_USER' WHERE variable_name='mysql-monitor_username';
     UPDATE global_variables SET variable_value='$BDD_ADMIN_PASS' WHERE variable_name='mysql-monitor_password';
@@ -62,7 +52,7 @@ data:
     mysql -u admin -padmin -h 127.0.0.1 -P 6032 <<EOF
     LOAD MYSQL SERVERS TO RUNTIME;
     INSERT INTO mysql_users(username,password,default_hostgroup) VALUES ('root','$MYSQL_ROOT_PASS',1);
-    INSERT INTO mysql_users(username,password,default_hostgroup) VALUES ('$WP_DB_ADMIN_USER','$WP_DB_ADMIN_PASS',1);
+    INSERT INTO mysql_users(username,password,default_hostgroup) VALUES ('$WP_DB_ADMIN_USER','$WP_DB_ADMIN_PASS',2);
     LOAD MYSQL USERS TO RUNTIME;
     SAVE MYSQL USERS TO DISK;
     EOF
@@ -73,4 +63,121 @@ data:
       do
       sleep 3600	
       done
+  proxysql.cfg: |
+   #file proxysql.cfg
+
+   # This config file is parsed using libconfig , and its grammar is described in:
+   # http://www.hyperrealm.com/libconfig/libconfig_manual.html#Configuration-File-Grammar
+   # Grammar is also copied at the end of this file
+
+   datadir="/var/lib/proxysql"
+
+   admin_variables=
+   {
+      admin_credentials="admin:admin"
+      mysql_ifaces="127.0.0.1:6032;/tmp/proxysql_admin.sock"
+   # refresh_interval=2000
+   # debug=true
+   }
+
+   mysql_variables=
+   {
+     threads=4
+     max_connections=2048
+     default_query_delay=0
+     default_query_timeout=36000000
+     have_compress=true
+     poll_timeout=2000
+     interfaces="0.0.0.0:6033;/tmp/proxysql.sock"
+     default_schema="information_schema"
+     stacksize=1048576
+     server_version="5.5.30"
+     connect_timeout_server=3000
+     monitor_history=600000
+     monitor_connect_interval=60000
+     monitor_ping_interval=10000
+     monitor_read_only_interval=1500
+     monitor_read_only_timeout=500
+     ping_interval_server=120000
+     ping_timeout_server=500
+     commands_stats=true
+     sessions_sort=true
+     connect_retries_on_failure=10
+   }
+
+
+   # defines all the MySQL servers
+   mysql_servers =
+   (
+       {
+        address = "master-bdd-as" 
+        port = 3306           
+        hostgroup = 1	       
+        status = "ONLINE"    
+        weight = 1            
+        compression = 0      
+        #max_connections = 100
+        max_replication_lag = 10  
+       },
+       {
+        address = "slave-bdd-as"
+        port = 3306           
+        hostgroup = 2	    
+        status = "ONLINE"     
+        weight = 1            
+        compression = 0      
+        #max_connections = 100
+        max_replication_lag = 10 
+       },
+
+   )
+
+   #defines MySQL Query Rules
+   mysql_query_rules:
+   (
+   # {
+   #  rule_id=1
+   #  active=1
+   #  match_pattern="^SELECT .* FOR UPDATE$"
+   #  destination_hostgroup=0
+   #  apply=1
+   # },
+   # {
+   #  rule_id=2
+   #  active=1
+   #  match_pattern="^SELECT"
+   #  destination_hostgroup=1
+   #  apply=1
+   #  }
+   )
+
+   scheduler=
+   (
+   #  {
+   #    id=1
+   #    active=0
+   #    interval_ms=10000
+   #    filename="/var/lib/proxysql/proxysql_galera_checker.sh"
+   #    arg1="0"
+   #    arg2="0"
+   #    arg3="0"
+   #    arg4="1"
+   #    arg5="/var/lib/proxysql/proxysql_galera_checker.log"
+   #  }
+   )
+
+
+  mysql_replication_hostgroups=
+  (
+   {
+    writer_hostgroup=1
+    reader_hostgroup=2
+    comment="groupwr"
+   } #,
+  # {
+  #  writer_hostgroup=50
+  #  reader_hostgroup=60
+  #  comment="test repl 2"
+  #  }
+  )
 
