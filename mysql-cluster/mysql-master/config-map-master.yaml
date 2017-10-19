@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mysql-master
+  namespace: thierry-space	
+  labels:
+    app: bdd-as
+data:
+  master.cnf: |
+    # Apply this config only on the master.
+    [mysqld]
+    log-bin=masterlog
+    server-id=1 
