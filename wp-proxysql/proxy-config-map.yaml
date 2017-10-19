@@ -6,7 +6,7 @@ metadata:
   labels:
     app: wp-proxysql
 data:
-  init.sh: |
+  configProxy.sh: |
     #!/bin/bash
 
     echo "##################"
@@ -37,7 +37,7 @@ data:
     mysql -u admin -padmin -h 127.0.0.1 -P 6032 -e "$sqlcmd"
 
     #insert Slave Service to proxy	
-    sqlcmd="INSERT INTO mysql_servers(hostgroup_id,hostname,port) VALUES (1,'slave-bdd-as',3306)"
+    sqlcmd="INSERT INTO mysql_servers(hostgroup_id,hostname,port) VALUES (2,'slave-bdd-as',3306)"
     mysql -u admin -padmin -h 127.0.0.1 -P 6032 -e "$sqlcmd"
     
     echo "-----> Slave and Master created in Proxy" 
@@ -46,18 +46,21 @@ data:
     UPDATE global_variables SET variable_value='$BDD_ADMIN_USER' WHERE variable_name='mysql-monitor_username';
     UPDATE global_variables SET variable_value='$BDD_ADMIN_PASS' WHERE variable_name='mysql-monitor_password';
     UPDATE global_variables SET variable_value='2000' WHERE variable_name IN ('mysql-monitor_connect_interval','mysql-monitor_ping_interval','mysql-monitor_read_only_interval');
+    UPDATE global_variables SET variable_value='2000' WHERE variable_name='mysql-connection_max_age_ms';
+    UPDATE global_variables SET variable_value='true' WHERE variable_name='mysql-monitor_writer_is_also_reader';
+    UPDATE global_variables SET variable_value='200' WHERE variable_name='mysql-connect_timeout_server';  
+    UPDATE global_variables SET variable_value='3000' WHERE variable_name='mysql-connect_timeout_server_max';  
     LOAD MYSQL VARIABLES TO RUNTIME;
     SAVE MYSQL VARIABLES TO DISK;
     EOF
     echo "-----> Serveurs et monitoring configures"  
-    sleep 5
 
     mysql -u admin -padmin -h 127.0.0.1 -P 6032 <<EOF
     LOAD MYSQL SERVERS TO RUNTIME;
     INSERT INTO mysql_replication_hostgroups VALUES (1,2,'group comment');
     EOF
 
-    sleep 5
+    
     echo "----> Hostgroups config"  
     mysql -u admin -padmin -h 127.0.0.1 -P 6032 <<EOF
     LOAD MYSQL SERVERS TO RUNTIME;
@@ -65,6 +68,12 @@ data:
     INSERT INTO mysql_users(username,password,default_hostgroup) VALUES ('$WP_DB_ADMIN_USER','$WP_DB_ADMIN_PASS',1);
     LOAD MYSQL USERS TO RUNTIME;
     SAVE MYSQL USERS TO DISK;
+    INSERT INTO mysql_query_rules (rule_id,active,flagIN,match_pattern,negate_match_pattern,destination_hostgroup,apply) VALUES (1,1,0,'^SELECT.*FOR UPDATE$',0,1,1);
+    #INSERT INTO mysql_query_rules (rule_id,active,flagIN,match_pattern,negate_match_pattern,destination_hostgroup,apply) VALUES (2,1,0,'^SELECT autoload',0,1,1);
+    INSERT INTO mysql_query_rules (rule_id,active,flagIN,match_pattern,negate_match_pattern,destination_hostgroup,apply) VALUES (2,1,0,'^.*wp_options',0,1,1);
+    INSERT INTO mysql_query_rules (rule_id,active,flagIN,match_pattern,negate_match_pattern,destination_hostgroup,cache_ttl,apply) VALUES (3,1,0,'^SELECT',0,2,100,1);
+    INSERT INTO mysql_query_rules (rule_id,active,flagIN,match_pattern,negate_match_pattern,destination_hostgroup,cache_ttl,apply) VALUES (4,1,0,'^SHOW',0,2,100,1);
+    LOAD MYSQL QUERY RULES TO RUNTIME; 
     EOF
     echo "################################"
     echo "Configuration du proxy terminée "
@@ -72,5 +81,4 @@ data:
     while true
       do
       sleep 3600	
-      done
-
+    done

@@ -6,17 +6,10 @@ metadata:
   labels:
     app: bdd-as
 data:
-  master.cnf: |
-    # Apply this config only on the master.
-    [mysqld]
-    log-bin=masterlog
-    server-id=1 
   slave.cnf: |
     # Apply this config only on slaves.
     [mysqld]
     read-only=1
-  initMaster.sh: |
-    cp /mnt/config/master.cnf /mnt/conf.d/
   initSlave.sh: |
     cp /mnt/config/slave.cnf /mnt/conf.d/
 
@@ -161,9 +154,6 @@ data:
           sleep 3600
           done 
 
-    #93226b89-a8e8-11e7-81a7-0a580a020306
-    #551ae8a0-a8e7-11e7-b829-0a580a0205a6
-    #f967079f-a8fb-11e7-aa90-0a580a0205a8  
     
     
 

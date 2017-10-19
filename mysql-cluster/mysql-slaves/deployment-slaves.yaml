@@ -7,7 +7,7 @@ metadata:
     app: bdd-as
     role: slave
 spec:
-  replicas: 2
+  replicas: 1
   selector:
     matchLabels:
       app: bdd-as
@@ -21,6 +21,13 @@ spec:
       initContainers:
       - name: init-slave
         image: mysql:5.7
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "256Mi"
+          limits:
+            cpu: "200m"
+            memory: "500Mi"
         env:
         - name: MYSQL_ROOT_PASSWORD
           valueFrom:
@@ -36,8 +43,15 @@ spec:
         - mountPath: /mnt/config
           name: config
       containers:
-      - name: mysql
+      - name: slave
         image: mysql:5.7
+        resources:
+          requests:
+            cpu: "50m"
+            memory: "256Mi"
+          limits:
+            cpu: "100m"
+            memory: "500Mi"
         env:
         - name: MYSQL_ROOT_PASSWORD
           valueFrom:
@@ -62,8 +76,6 @@ spec:
             name: data 
           - mountPath: /etc/mysql/conf.d
             name: conf
-          - mountPath: /mnt/config
-            name: config
         livenessProbe:
           exec:
             command: ["mysqladmin", "ping", "-u" , "root","-pk8sadmin"]
@@ -78,9 +90,16 @@ spec:
           timeoutSeconds: 1
       - name: config-slave
         image: mysql:5.7
+        resources:
+          requests:
+            cpu: "50m"
+            memory: "256Mi"
+          limits:
+            cpu: "100m"
+            memory: "500Mi"
         command:
         - bash
-        - /config/configSlave.sh
+        - /mnt/config/configSlave.sh
         env:
         - name: MYSQL_ROOT_PASSWORD
           valueFrom:
@@ -108,8 +127,8 @@ spec:
               name: bdd-as
               key: adminpass 
         volumeMounts:
-        - name: config
-          mountPath: /config          
+        - mountPath: /mnt/config
+          name: config          
       volumes:
         - name: data
           emptyDir: {}

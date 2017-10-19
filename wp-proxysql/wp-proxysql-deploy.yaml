@@ -56,7 +56,7 @@ spec:
           containerPort: 6033
         - name: pxsql-conf
           containerPort: 6032
-      - name: init-proxy
+      - name: config-proxy
         image: mysql:5.7
         resources:
           requests:
@@ -67,7 +67,7 @@ spec:
             memory: "150Mi"
         command:
         - bash
-        - /config/init.sh 
+        - /mnt/config/configProxy.sh 
         env:
         - name: MYSQL_ROOT_PASS
           valueFrom:
@@ -95,12 +95,12 @@ spec:
               name: wp
               key: wp_db_pass
         volumeMounts:
-        - name: config
-          mountPath: /config        
+        - mountPath: /mnt/config
+          name: config        
       volumes:
       - name: pv-wp
         persistentVolumeClaim:
           claimName: pvc-wp
       - name: config
         configMap:
-          name: "wp-proxy"
+          name: wp-proxy
